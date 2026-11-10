@@ -1,0 +1,66 @@
+
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout KYLEE STORE</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">KYLEE<span> STORE</span></div>
+  <a href="index.html">← BACK</a>
+</header>
+
+<main class="container">
+  <p class="tag">LAST STEP BRO</p>
+  <h1>CHECKOUT ORDER LU</h1>
+
+  <div id="checkout-items" class="panel"></div>
+
+  <form id="checkout-form" class="panel">
+    <label>Nama
+      <input name="name" required>
+    </label>
+
+    <label>No WhatsApp
+      <input name="phone" required>
+    </label>
+
+    <label>Email
+      <input name="email" type="email">
+    </label>
+
+    <button class="btn" type="submit">
+      CREATE ORDER
+    </button>
+  </form>
+
+  <section id="payment" class="panel hidden">
+    <h2>SCAN QR TNG</h2>
+    <p>Scan QR dan bayar ikut jumlah order bro.</p>
+
+    <img id="qr-image"
+      src="assets/tng-qr.png"
+      style="width:250px;max-width:100%;background:white;padding:10px">
+
+    <h3 id="order-summary"></h3>
+
+    <label>Upload resit
+      <input id="receipt" type="file"
+        accept="image/png,image/jpeg,image/webp">
+    </label>
+
+    <button id="upload-proof" class="btn">
+      HANTAR RESIT
+    </button>
+
+    <p id="payment-message"></p>
+  </section>
+</main>
+
+<script type="module" src="js/checkout.js"></script>
+</body>
+</html>
