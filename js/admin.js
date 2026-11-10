@@ -164,7 +164,7 @@ productForm.addEventListener("submit", async (e) => {
         description,
         image_url: imageUrl || null,
         is_active: true,
-        stock: 0
+        stock: 999
       })
       .select()
       .single();
