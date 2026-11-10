@@ -1,0 +1,64 @@
+
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>KYLEE ADMIN DASHBOARD</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">KYLEE<span> ADMIN</span></div>
+  <button id="logout" class="btn">LOGOUT</button>
+</header>
+
+<main class="container">
+  <p class="tag">CONTROL ROOM</p>
+  <h1>ADMIN DASHBOARD</h1>
+
+  <section class="panel">
+    <h2>ADD PRODUK BARU</h2>
+
+    <form id="product-form">
+      <label>Nama produk
+        <input name="name" required>
+      </label>
+
+      <label>Harga RM
+        <input name="price" type="number" min="0" step=".01" required>
+      </label>
+
+      <label>Kategori
+        <input name="category">
+      </label>
+
+      <label>Description
+        <textarea name="description"></textarea>
+      </label>
+
+      <label>Image URL
+        <input name="image_url" type="url">
+      </label>
+
+      <button class="btn">ADD PRODUCT</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>ORDER MASUK</h2>
+    <div id="orders">Loading...</div>
+  </section>
+
+  <section class="panel">
+    <h2>PRODUCT LIST</h2>
+    <div id="admin-products"></div>
+  </section>
+
+  <p id="admin-message"></p>
+</main>
+
+<script type="module" src="../js/admin.js"></script>
+</body>
+</html>
