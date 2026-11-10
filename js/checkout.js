@@ -13,20 +13,51 @@ let order = null;
 
 const money = n => "RM " + Number(n).toFixed(2);
 
+// CART DISPLAY
 if (!cart.length) {
   box.textContent = "Cart kosong bro!";
   form.classList.add("hidden");
 } else {
   box.textContent = "Produk dalam cart: " +
-    cart.map(p => `${p.id} × ${p.quantity}`).join(", ");
+    cart.map(p => `${p.name || p.id} × ${p.quantity}`).join(", ");
 }
 
+// CREATE ORDER
 form.addEventListener("submit", async e => {
   e.preventDefault();
 
-  if (!cart.length) return;
+  if (!cart.length) {
+    alert("Cart kosong bro!");
+    return;
+  }
 
   const fd = new FormData(form);
+
+  // CONVERT CART FORMAT
+  const items = cart.map(item => ({
+    product_id: String(item.product_id || item.id || ""),
+    quantity: Number(item.quantity)
+  }));
+
+  // VALIDATE CART
+  const invalidItem = items.some(item =>
+    !item.product_id ||
+    !Number.isInteger(item.quantity) ||
+    item.quantity < 1
+  );
+
+  if (invalidItem) {
+    alert("Item atau quantity dalam cart tak sah.");
+    console.error("Invalid cart:", cart);
+    return;
+  }
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "PROCESSING...";
+  }
 
   try {
     const response = await fetch(
@@ -42,14 +73,16 @@ form.addEventListener("submit", async e => {
           customer_name: fd.get("name"),
           customer_phone: fd.get("phone"),
           customer_email: fd.get("email"),
-          items: cart
+          items
         })
       }
     );
 
     const result = await response.json();
 
-    if (!response.ok) throw new Error(result.error);
+    if (!response.ok) {
+      throw new Error(result.error || "Order gagal dibuat.");
+    }
 
     order = result;
 
@@ -60,12 +93,21 @@ form.addEventListener("submit", async e => {
       `${order.order_number} — ${money(order.total)}`;
 
   } catch (error) {
+    console.error("CHECKOUT ERROR:", error);
     alert(error.message || "Order gagal dibuat.");
+
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "CHECKOUT";
+    }
   }
 });
 
+// UPLOAD PAYMENT PROOF
 document.getElementById("upload-proof")
 .addEventListener("click", async () => {
+
   const file = document.getElementById("receipt").files[0];
   const msg = document.getElementById("payment-message");
 
@@ -74,16 +116,22 @@ document.getElementById("upload-proof")
     return;
   }
 
-  if (!["image/jpeg","image/png","image/webp"].includes(file.type)
-      || file.size > 5 * 1024 * 1024) {
+  if (
+    !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+    file.size > 5 * 1024 * 1024
+  ) {
     msg.textContent = "Resit mesti JPG/PNG/WEBP bawah 5MB.";
     return;
   }
 
   const fd = new FormData();
+
   fd.append("order_id", order.order_id);
   fd.append("order_token", order.order_token);
   fd.append("receipt", file);
+
+  const uploadBtn = document.getElementById("upload-proof");
+  uploadBtn.disabled = true;
 
   try {
     const response = await fetch(
@@ -100,7 +148,9 @@ document.getElementById("upload-proof")
 
     const result = await response.json();
 
-    if (!response.ok) throw new Error(result.error);
+    if (!response.ok) {
+      throw new Error(result.error || "Upload gagal.");
+    }
 
     msg.textContent =
       "RESIT DAH MASUK! Tunggu admin check payment.";
@@ -108,6 +158,10 @@ document.getElementById("upload-proof")
     localStorage.removeItem("kylee_cart");
 
   } catch (error) {
+    console.error("UPLOAD ERROR:", error);
     msg.textContent = error.message || "Upload gagal.";
+
+  } finally {
+    uploadBtn.disabled = false;
   }
 });
