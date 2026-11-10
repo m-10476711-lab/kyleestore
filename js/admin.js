@@ -6,9 +6,25 @@ const productList = document.getElementById("admin-products");
 const productForm = document.getElementById("product-form");
 const ordersList = document.getElementById("orders");
 
+const ORDER_STATUSES = [
+  ["pending", "Pending"],
+  ["processing", "Processing"],
+  ["completed", "Completed"],
+  ["cancelled", "Cancelled"]
+];
+
 function showMessage(message, isError = false) {
   msg.textContent = message;
   msg.style.color = isError ? "#ff5555" : "#a78bfa";
+}
+
+function createElement(tag, text, className = "") {
+  const element = document.createElement(tag);
+  element.textContent = text;
+
+  if (className) element.className = className;
+
+  return element;
 }
 
 // ADMIN AUTH
@@ -66,37 +82,81 @@ async function loadProducts() {
     const card = document.createElement("div");
     card.className = "product";
 
-    const title = document.createElement("h3");
-    title.textContent = p.name;
+    const title = createElement("h3", p.name);
 
-    const price = document.createElement("p");
-    price.textContent = "RM " + Number(p.price).toFixed(2);
+    const price = createElement(
+      "p",
+      "RM " + Number(p.price).toFixed(2)
+    );
 
-    const category = document.createElement("p");
-    category.textContent = "Category: " + (p.category || "-");
+    const category = createElement(
+      "p",
+      "Category: " + (p.category || "-")
+    );
 
-    const status = document.createElement("p");
-    status.textContent = p.is_active ? "Active" : "Inactive";
+    const status = createElement(
+      "p",
+      p.is_active ? "Active" : "Inactive"
+    );
 
-    const toggleBtn = document.createElement("button");
-    toggleBtn.className = "btn toggle-product";
+    const toggleBtn = createElement(
+      "button",
+      p.is_active ? "HIDE PRODUCT" : "RESTORE PRODUCT",
+      "btn toggle-product"
+    );
+
+    toggleBtn.type = "button";
     toggleBtn.dataset.id = p.id;
     toggleBtn.dataset.active = String(p.is_active);
-
-    toggleBtn.textContent = p.is_active
-      ? "HIDE PRODUCT"
-      : "RESTORE PRODUCT";
 
     card.append(title, price, category, status, toggleBtn);
     productList.appendChild(card);
   });
 }
 
+// LOAD RECEIPTS
+async function loadReceipts(orderId) {
+  const { data: proofs, error } = await supabase
+    .from("payment_proofs")
+    .select("file_path")
+    .eq("order_id", orderId);
+
+  if (error) {
+    console.error("RECEIPT DATABASE ERROR:", error);
+    return {
+      error: "Gagal membaca rekod receipt."
+    };
+  }
+
+  if (!proofs || proofs.length === 0) {
+    return {
+      empty: true
+    };
+  }
+
+  const receipts = [];
+
+  for (const proof of proofs) {
+    const { data, error: signedError } = await supabase.storage
+      .from("payment-proofs")
+      .createSignedUrl(proof.file_path, 3600);
+
+    if (signedError || !data?.signedUrl) {
+      console.error("SIGNED URL ERROR:", signedError);
+      continue;
+    }
+
+    receipts.push(data.signedUrl);
+  }
+
+  return { receipts };
+}
+
 // LOAD ORDERS
 async function loadOrders() {
   ordersList.textContent = "Loading orders...";
 
-  const { data, error } = await supabase
+  const { data: orders, error } = await supabase
     .from("orders")
     .select("*")
     .order("created_at", { ascending: false });
@@ -109,49 +169,106 @@ async function loadOrders() {
 
   ordersList.innerHTML = "";
 
-  if (!data || data.length === 0) {
+  if (!orders || orders.length === 0) {
     ordersList.textContent = "Belum ada order.";
     return;
   }
 
-  data.forEach(o => {
+  for (const o of orders) {
     const card = document.createElement("div");
     card.className = "product";
 
-    const heading = document.createElement("h3");
-    heading.textContent = o.order_number || "Order";
+    const heading = createElement(
+      "h3",
+      o.order_number || "Order"
+    );
 
-    const customer = document.createElement("p");
-    customer.textContent =
-      `${o.customer_name || "-"} · ${o.customer_phone || "-"}`;
+    const customer = createElement(
+      "p",
+      `${o.customer_name || "-"} · ${o.customer_phone || "-"}`
+    );
 
-    const total = document.createElement("p");
-    total.textContent = "RM " + Number(o.total || 0).toFixed(2);
+    const total = createElement(
+      "p",
+      "RM " + Number(o.total || 0).toFixed(2)
+    );
 
-    const payment = document.createElement("p");
-    payment.textContent =
-      "Payment Status: " + (o.payment_status || "-");
+    const payment = createElement(
+      "p",
+      "Payment Status: " + (o.payment_status || "-")
+    );
 
-    const currentStatus = o.order_status || "pending";
+    const orderStatus = createElement(
+      "p",
+      "Order Status: " + (o.order_status || "-")
+    );
 
-    const statusText = document.createElement("p");
-    statusText.textContent = "Order Status: " + currentStatus;
+    // RECEIPT SECTION
+    const receiptSection = document.createElement("div");
+    receiptSection.style.margin = "15px 0";
 
-    const label = document.createElement("label");
-    label.textContent = "Update Order Status";
+    const receiptHeading = createElement(
+      "h4",
+      "PAYMENT RECEIPT"
+    );
+
+    receiptSection.appendChild(receiptHeading);
+
+    const receiptResult = await loadReceipts(o.id);
+
+    if (receiptResult.error) {
+      receiptSection.appendChild(
+        createElement("p", receiptResult.error)
+      );
+
+    } else if (receiptResult.empty) {
+      receiptSection.appendChild(
+        createElement("p", "Receipt belum dihantar.")
+      );
+
+    } else if (!receiptResult.receipts?.length) {
+      receiptSection.appendChild(
+        createElement("p", "Receipt tak dapat dibuka.")
+      );
+
+    } else {
+      receiptResult.receipts.forEach((url, index) => {
+        const image = document.createElement("img");
+
+        image.src = url;
+        image.alt = "Customer payment receipt";
+        image.loading = "lazy";
+        image.style.width = "100%";
+        image.style.maxWidth = "280px";
+        image.style.display = "block";
+        image.style.margin = "10px 0";
+        image.style.borderRadius = "12px";
+        image.style.border = "1px solid #6d5b9b";
+
+        const openLink = document.createElement("a");
+        openLink.href = url;
+        openLink.target = "_blank";
+        openLink.rel = "noopener noreferrer";
+        openLink.textContent = `OPEN RECEIPT ${index + 1}`;
+
+        receiptSection.append(image, openLink);
+      });
+    }
+
+    // ORDER STATUS DROPDOWN
+    const label = createElement(
+      "label",
+      "Update Order Status"
+    );
 
     const select = document.createElement("select");
     select.className = "order-status-select";
     select.dataset.id = o.id;
 
-    const statuses = [
-      ["pending", "Pending"],
-      ["processing", "Processing"],
-      ["completed", "Completed"],
-      ["cancelled", "Cancelled"]
-    ];
+    const currentStatus = o.order_status || "pending";
 
-    // Preserve current value if it differs from standard options
+    const statuses = [...ORDER_STATUSES];
+
     if (!statuses.some(([value]) => value === currentStatus)) {
       statuses.unshift([currentStatus, currentStatus]);
     }
@@ -165,33 +282,39 @@ async function loadOrders() {
 
     select.value = currentStatus;
 
-    const updateBtn = document.createElement("button");
-    updateBtn.className = "btn update-order";
+    const updateBtn = createElement(
+      "button",
+      "UPDATE STATUS",
+      "btn update-order"
+    );
+
+    updateBtn.type = "button";
     updateBtn.dataset.id = o.id;
-    updateBtn.textContent = "UPDATE STATUS";
 
     card.append(
       heading,
       customer,
       total,
       payment,
-      statusText,
+      orderStatus,
+      receiptSection,
       label,
       select,
       updateBtn
     );
 
     ordersList.appendChild(card);
-  });
+  }
 }
 
 // UPDATE ORDER STATUS
-ordersList.addEventListener("click", async (e) => {
+ordersList.addEventListener("click", async e => {
   const btn = e.target.closest(".update-order");
 
   if (!btn) return;
 
   const id = btn.dataset.id;
+
   const select = ordersList.querySelector(
     `.order-status-select[data-id="${CSS.escape(id)}"]`
   );
@@ -207,25 +330,28 @@ ordersList.addEventListener("click", async (e) => {
   btn.disabled = true;
   btn.textContent = "UPDATING...";
 
-  const { error } = await supabase
-    .from("orders")
-    .update({ order_status: newStatus })
-    .eq("id", id);
+  try {
+    const { error } = await supabase
+      .from("orders")
+      .update({ order_status: newStatus })
+      .eq("id", id);
 
-  if (error) {
-    console.error("UPDATE ORDER ERROR:", error);
+    if (error) throw error;
+
+    showMessage("Order status berjaya dikemaskini!");
+    await loadOrders();
+
+  } catch (error) {
+    console.error(error);
     showMessage("Gagal update order: " + error.message, true);
+
     btn.disabled = false;
     btn.textContent = "UPDATE STATUS";
-    return;
   }
-
-  showMessage("Order status berjaya dikemaskini!");
-  await loadOrders();
 });
 
 // ADD PRODUCT
-productForm.addEventListener("submit", async (e) => {
+productForm.addEventListener("submit", async e => {
   e.preventDefault();
 
   const submitBtn = productForm.querySelector(
@@ -263,19 +389,16 @@ productForm.addEventListener("submit", async (e) => {
       .select()
       .single();
 
-    if (error) {
-      showMessage("Gagal tambah produk: " + error.message, true);
-      return;
-    }
+    if (error) throw error;
 
     showMessage("Produk berjaya ditambah: " + data.name);
-    productForm.reset();
 
+    productForm.reset();
     await loadProducts();
 
   } catch (error) {
     console.error(error);
-    showMessage("Unexpected error: " + error.message, true);
+    showMessage("Gagal tambah produk: " + error.message, true);
 
   } finally {
     submitBtn.disabled = false;
@@ -284,7 +407,7 @@ productForm.addEventListener("submit", async (e) => {
 });
 
 // HIDE / RESTORE PRODUCT
-productList.addEventListener("click", async (e) => {
+productList.addEventListener("click", async e => {
   const btn = e.target.closest(".toggle-product");
 
   if (!btn) return;
@@ -299,24 +422,27 @@ productList.addEventListener("click", async (e) => {
 
   btn.disabled = true;
 
-  const { error } = await supabase
-    .from("products")
-    .update({ is_active: newActive })
-    .eq("id", id);
+  try {
+    const { error } = await supabase
+      .from("products")
+      .update({ is_active: newActive })
+      .eq("id", id);
 
-  if (error) {
+    if (error) throw error;
+
+    showMessage(
+      newActive
+        ? "Product berjaya di-restore!"
+        : "Product berjaya disembunyikan!"
+    );
+
+    await loadProducts();
+
+  } catch (error) {
+    console.error(error);
     showMessage("Gagal update product: " + error.message, true);
     btn.disabled = false;
-    return;
   }
-
-  showMessage(
-    newActive
-      ? "Product berjaya di-restore!"
-      : "Product berjaya disembunyikan!"
-  );
-
-  await loadProducts();
 });
 
 // INITIAL LOAD
