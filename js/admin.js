@@ -78,18 +78,24 @@ async function loadProducts() {
     const status = document.createElement("p");
     status.textContent = p.is_active ? "Active" : "Inactive";
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.className = "btn delete";
-    deleteBtn.textContent = "DELETE";
-    deleteBtn.dataset.id = p.id;
+    const toggleBtn = document.createElement("button");
+    toggleBtn.className = "btn toggle-product";
+    toggleBtn.dataset.id = p.id;
+    toggleBtn.dataset.active = String(p.is_active);
 
-    card.append(title, price, category, status, deleteBtn);
+    toggleBtn.textContent = p.is_active
+      ? "HIDE PRODUCT"
+      : "RESTORE PRODUCT";
+
+    card.append(title, price, category, status, toggleBtn);
     productList.appendChild(card);
   });
 }
 
 // LOAD ORDERS
 async function loadOrders() {
+  ordersList.textContent = "Loading orders...";
+
   const { data, error } = await supabase
     .from("orders")
     .select("*")
@@ -97,6 +103,7 @@ async function loadOrders() {
 
   if (error) {
     ordersList.textContent = error.message;
+    showMessage("Gagal load orders: " + error.message, true);
     return;
   }
 
@@ -112,23 +119,110 @@ async function loadOrders() {
     card.className = "product";
 
     const heading = document.createElement("h3");
-    heading.textContent = o.order_number;
+    heading.textContent = o.order_number || "Order";
 
     const customer = document.createElement("p");
     customer.textContent =
-      `${o.customer_name} · ${o.customer_phone}`;
+      `${o.customer_name || "-"} · ${o.customer_phone || "-"}`;
 
     const total = document.createElement("p");
-    total.textContent = "RM " + Number(o.total).toFixed(2);
+    total.textContent = "RM " + Number(o.total || 0).toFixed(2);
 
-    const status = document.createElement("p");
-    status.textContent =
-      `${o.payment_status} / ${o.order_status}`;
+    const payment = document.createElement("p");
+    payment.textContent =
+      "Payment Status: " + (o.payment_status || "-");
 
-    card.append(heading, customer, total, status);
+    const currentStatus = o.order_status || "pending";
+
+    const statusText = document.createElement("p");
+    statusText.textContent = "Order Status: " + currentStatus;
+
+    const label = document.createElement("label");
+    label.textContent = "Update Order Status";
+
+    const select = document.createElement("select");
+    select.className = "order-status-select";
+    select.dataset.id = o.id;
+
+    const statuses = [
+      ["pending", "Pending"],
+      ["processing", "Processing"],
+      ["completed", "Completed"],
+      ["cancelled", "Cancelled"]
+    ];
+
+    // Preserve current value if it differs from standard options
+    if (!statuses.some(([value]) => value === currentStatus)) {
+      statuses.unshift([currentStatus, currentStatus]);
+    }
+
+    statuses.forEach(([value, text]) => {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = text;
+      select.appendChild(option);
+    });
+
+    select.value = currentStatus;
+
+    const updateBtn = document.createElement("button");
+    updateBtn.className = "btn update-order";
+    updateBtn.dataset.id = o.id;
+    updateBtn.textContent = "UPDATE STATUS";
+
+    card.append(
+      heading,
+      customer,
+      total,
+      payment,
+      statusText,
+      label,
+      select,
+      updateBtn
+    );
+
     ordersList.appendChild(card);
   });
 }
+
+// UPDATE ORDER STATUS
+ordersList.addEventListener("click", async (e) => {
+  const btn = e.target.closest(".update-order");
+
+  if (!btn) return;
+
+  const id = btn.dataset.id;
+  const select = ordersList.querySelector(
+    `.order-status-select[data-id="${CSS.escape(id)}"]`
+  );
+
+  if (!select) return;
+
+  const newStatus = select.value;
+
+  if (!confirm("Confirm update order status kepada " + newStatus + "?")) {
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = "UPDATING...";
+
+  const { error } = await supabase
+    .from("orders")
+    .update({ order_status: newStatus })
+    .eq("id", id);
+
+  if (error) {
+    console.error("UPDATE ORDER ERROR:", error);
+    showMessage("Gagal update order: " + error.message, true);
+    btn.disabled = false;
+    btn.textContent = "UPDATE STATUS";
+    return;
+  }
+
+  showMessage("Order status berjaya dikemaskini!");
+  await loadOrders();
+});
 
 // ADD PRODUCT
 productForm.addEventListener("submit", async (e) => {
@@ -170,13 +264,11 @@ productForm.addEventListener("submit", async (e) => {
       .single();
 
     if (error) {
-      console.error("ADD PRODUCT ERROR:", error);
       showMessage("Gagal tambah produk: " + error.message, true);
       return;
     }
 
     showMessage("Produk berjaya ditambah: " + data.name);
-
     productForm.reset();
 
     await loadProducts();
@@ -191,28 +283,39 @@ productForm.addEventListener("submit", async (e) => {
   }
 });
 
-// DELETE PRODUCT
+// HIDE / RESTORE PRODUCT
 productList.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".delete");
+  const btn = e.target.closest(".toggle-product");
 
   if (!btn) return;
 
-  if (!confirm("Confirm delete produk ni?")) return;
+  const id = btn.dataset.id;
+  const currentlyActive = btn.dataset.active === "true";
+  const newActive = !currentlyActive;
+
+  const action = newActive ? "restore" : "hide";
+
+  if (!confirm(`Confirm ${action} product ni?`)) return;
 
   btn.disabled = true;
 
   const { error } = await supabase
     .from("products")
-    .delete()
-    .eq("id", btn.dataset.id);
+    .update({ is_active: newActive })
+    .eq("id", id);
 
   if (error) {
-    showMessage("Gagal delete: " + error.message, true);
+    showMessage("Gagal update product: " + error.message, true);
     btn.disabled = false;
     return;
   }
 
-  showMessage("Produk berjaya dipadam!");
+  showMessage(
+    newActive
+      ? "Product berjaya di-restore!"
+      : "Product berjaya disembunyikan!"
+  );
+
   await loadProducts();
 });
 
