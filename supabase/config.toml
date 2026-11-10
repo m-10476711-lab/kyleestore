@@ -1,0 +1,5 @@
+[functions.create-order]
+verify_jwt = false
+
+[functions.submit-proof]
+verify_jwt = false
